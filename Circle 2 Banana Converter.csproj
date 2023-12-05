@@ -19,7 +19,7 @@
 
   <ItemGroup>
     <Reference Include="OsuParsers">
-      <HintPath>..\..\..\..\Documents\Circle 2 Banana Converter\References\OsuParsers.dll</HintPath>
+      <HintPath>OsuParsers.dll</HintPath>
     </Reference>
   </ItemGroup>
 

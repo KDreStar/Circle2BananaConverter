@@ -45,12 +45,19 @@ public class PosXes {
     public void UpdatePossibleTimes() {
         possibleTimes.Clear();
 
-        for (int i=0; i<times.Count; i++) {
+		int nextI = 1;
+		for (int i=0; i<times.Count; i=nextI) {
             int time = times[i];
 
-            //시간 개수만큼 Add
+            //시간 개수만큼 Add 후 다음 시간으로 넘어감
             for (int j=0; j<timeCounts[time]; j++)
                 possibleTimes.Add(time);
+
+			
+			for (nextI=i+1; nextI<times.Count; nextI++)	{
+				if (times[nextI] != time)
+					break;
+			}
         }
     }
 }
