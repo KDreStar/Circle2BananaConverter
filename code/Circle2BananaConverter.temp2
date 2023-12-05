@@ -1,0 +1,351 @@
+using OsuParsers.Beatmaps;
+using OsuParsers.Decoders;
+
+public static class Circle2BananaConverter {
+    public static String ConvertToBanana(string path, int pixelError, bool temp=false) {
+        /*
+        Part 1.
+        비트맵 읽기
+        Read to beatmap
+        */
+        Beatmap beatmap = BeatmapDecoder.Decode(path);
+
+        /*
+        Part 2.
+        X: indexing
+        time: sort (asc)
+        */
+        SortedHitObjects fruits = new SortedHitObjects(beatmap.HitObjects);
+
+        /*
+        Part 3.
+        Matching circle - banana
+        */
+
+        BananaManager bananaManager = new BananaManager();
+        ConvertRecoder recoder = new ConvertRecoder();
+
+        int dropletCount = 0;
+
+        MatchingTable matchingTable = new MatchingTable();
+
+        while (true) {
+            int firstBaseX = bananaManager.FirstBananaX;
+            int secondBaseX = bananaManager.SecondBananaX;
+
+            int minI = firstBaseX - pixelError < 0 ? 0 : firstBaseX - pixelError;
+            int maxI = firstBaseX + pixelError > Consts.CATCH_WIDTH ? Consts.CATCH_WIDTH : firstBaseX + pixelError;
+
+            int minJ = secondBaseX - pixelError < 0 ? 0 : secondBaseX - pixelError;
+            int maxJ = secondBaseX + pixelError > Consts.CATCH_WIDTH ? Consts.CATCH_WIDTH : secondBaseX + pixelError;
+
+            int firstFruitX = 0;
+            int firstFruitTime = 0;
+            int secondFruitX = 0;
+            int secondFruitTime = 0;
+
+            int timeGap = -1;
+
+            for (int i=minI; i<=maxI; i++) {
+                for (int j=minJ; j<=maxJ; j++) {
+                    List<int> firstTimes = fruits.GetPossibleTimes(i);
+                    List<int> secondTimes = fruits.GetTimes(j);//fruits.IsPossible() ? fruits.GetPossibleTimes(j) : fruits.GetTimes(j);
+
+                    (firstFruitTime, secondFruitTime, timeGap) = Match(firstTimes, secondTimes);
+
+                    //둘중에 1개라도 Count를 넘으면 찾지 못함
+                    if (timeGap == -1)
+                        continue;
+
+                    firstFruitX = i;
+                    secondFruitX = j;
+
+                    //exit for for
+                    i = maxI;
+                    j = maxJ;
+                }
+            }
+
+            //일치하는 경우가 없을 때는 droplet
+            if (timeGap == -1) {
+                bananaManager.ProceedForDroplet();
+                dropletCount++;
+                continue;
+            }
+
+            //매칭된 경우 기록 (dropletCount, timegap)
+            //+ 찾았는데 visit 변화가 없는 경우 = 즉 같은걸 찾은 경우는 스킵
+            int prevRealCount = fruits.RealCount;
+
+            fruits.Visit(firstFruitX, firstFruitTime);
+            fruits.Visit(secondFruitX, secondFruitTime);
+
+            if (prevRealCount == fruits.RealCount) {
+                Console.WriteLine("Continued");
+                bananaManager.ProceedForDroplet();
+                continue;
+            }
+
+            Console.WriteLine("Recording");
+            Console.WriteLine((firstFruitX, secondFruitX, dropletCount, firstFruitTime, secondFruitTime));
+            fruits.Print2();
+            Console.WriteLine(fruits.RealCount);
+
+            bananaManager.ProceedForBanana();
+            dropletCount = 0;
+        }
+
+        return "";
+        /*
+        Part 4.
+        Export
+
+        씨앗이 1개 나오는 BPM 기준
+        slider_length = slider_multiplier * 50 * dropletCount
+
+        Slider syntax: x,y,time,type,hitSound,curveType|curvePoints,slides,length,edgeSounds,edgeSets,hitSample
+        Spinner syntax: x,y,time,type,hitSound,endTime,hitSample
+        */
+
+        string result = "";
+
+        for (int i=0; i<recoder.infos.Count; i++) {
+            RecordInfo info = recoder.infos[i];
+
+            /*
+            idk
+            how it works at 3 billions ms
+
+            hard coding
+
+            BPM 100
+            length | repeat | dropletCount
+                50 | 1      | 1 tick 0
+                50 | 2      | 2
+                50 | 3      | 4
+                50 | 4      | 5
+                50 | 5      | 6
+                50 | 6      | 8
+                50 | 7      | 9
+                50 | 8      | 10
+                50 | 9      | 12
+                50 | 10     | 13
+                50 | 11     | 15
+                50 | 12     | 16
+
+                ..
+
+                50 | 44 | 
+
+
+                60 | 1      | 2
+                60 | 2      | 3
+                60 | 9      | 16
+
+
+                100 | 1     | 3 tick 0
+                100 | 2     | 7
+                100 | 3     | 11
+                100 | 4     | 14
+
+                50 | 1      | 1 tick 0
+
+                100 | 1     | 3 tick 0
+
+                150 | 1     | 6 tick 1   / 3 / 2 
+
+                200 | 1     | 8 tick 1  / 3 / 4?
+
+                250 | 1     | 10 tick 2   3 3 2
+
+                300 | 1     | 13 tick 2   3 3 4
+
+                350 | 1     | 15 tick 3   3 3 3 3
+
+                400 | 1     | 17 tick 3   3 3 4 4
+
+                450 | 1     | 20 tick 4   3 3 3 3 4
+
+                500 | 1     | 22 tick 4   3 3 4 4 4
+
+                550 | 1     | 25 tick 5
+
+                if (sinceLastTick > 80) {
+                    double timeBetweenTiny = sinceLastTick;
+
+                    while (timeBetweenTiny > 100)
+                        timeBetweenTiny /= 2;
+
+                    for (double t = timeBetweenTiny; t < sinceLastTick; t += timeBetweenTiny)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        AddNested(new TinyDroplet
+                        {
+                            StartTime = t + lastEvent.Value.Time,
+                            X = ClampToPlayfield(EffectiveX + Path.PositionAt(
+                                lastEvent.Value.PathProgress + (t / sinceLastTick) * (e.PathProgress - lastEvent.Value.PathProgress)).X),
+                        });
+                    }
+                }
+
+                idk
+
+                59 1
+                60 2
+                ~
+                71 2
+                72 inf loop
+                ~
+                91 inf loop
+                92 3
+                ~
+                101 3
+                102 5
+                ~
+                139 5
+                140 inf loop
+
+
+
+                L  | R  | D
+                50 | 1  | 1
+                50 | 2  | 2
+                50 | 3  | 4
+                50 | 6  | 8
+                50 | 12 | 16
+                50 | 24 | 32
+                50 | 48 | 64
+
+
+                BPM 200 tickRate = 2
+
+                1 0
+                ~
+                33 0
+                33.333 0
+                33.34 inf <- 100 / 3
+                34 inf
+                ~
+                53 inf
+                53.3 inf
+                53.4 4
+                54 4
+                ~
+                56 4 
+                57 6
+                66 6
+
+                BPM 200 tickRate = 1
+
+                1. 틱이 생성이 안되는 거리면 무한루프
+
+                -214700000
+                -2147000000
+                -2147481300
+                -2147481400
+
+                -2147481835 .. .
+                -2147481836 . ..
+
+                -2147481844 . .
+                -2147481847 (max)
+                -2147481848 (skiped)
+
+                작은 씨앗때문에 생기는 오류 같으므로
+                BPM=600 으로 하고 큰 씨앗만 생성되게 하기
+
+                384 = a * b
+
+                tickRate | min sliderlength for it is showed 1 big droplet
+                       1 | 100
+                       2 | 50
+                       3 | 33.3
+                       4 | 25
+
+                if (repeat count * slider length > 60000)
+                    fail to load the beatmap
+            */
+            if (info.type == VALUE_TYPE.DROPLET) {
+                dropletCount = info.value1;
+
+                while (dropletCount > 0) {
+                    double baseLength = 100.0 * beatmap.DifficultySection.SliderMultiplier / beatmap.DifficultySection.SliderTickRate;
+                    int sliderLength = (int)Math.Round(baseLength * (dropletCount + 1));
+
+                    Console.Write("(" + dropletCount + ")");
+
+                    if (sliderLength > Consts.MAX_SLIDER) {
+                        result += string.Format("0,0,{0},2,0,L|1:0,{1},{2}", Consts.MINUS_TIME, 1, Consts.MAX_SLIDER);
+                        result += "\n";
+
+                        dropletCount -= (int)Math.Round((Consts.MAX_SLIDER - baseLength) / baseLength);
+                        Console.Write("Exceed " + (int)Math.Round((Consts.MAX_SLIDER - baseLength) / baseLength));
+                    } else {
+                        result += string.Format("0,0,{0},2,0,L|1:0,{1},{2}", Consts.MINUS_TIME, 1, sliderLength);
+                        result += "\n";
+
+                        dropletCount = 0;
+                    }
+                }
+            } else {
+                result += string.Format("256,192,{0},12,0,{1},0:0:0:0:", info.value1, info.value1 + info.value2);
+                result += "\n";
+            }
+        }
+
+        return result;
+    }
+
+    private static (int, int, int) Match(List<int> firsts, List<int> seconds) {
+        int i = 0;
+        int j = 0;
+        int timeGap = -1;
+
+        //Console.WriteLine("Matching " + (firsts.Count + seconds.Count));
+
+        if (firsts.Count == 0 || seconds.Count == 0)
+            return (i, j, timeGap);
+
+        /*             i....
+        firsts  1001 2000 551313
+        seconds 1500 1800 2001 2010
+                            j..
+        */
+        while (i < firsts.Count && j < seconds.Count) {
+            int firstTime = firsts[i];
+            int secondTime = seconds[j];
+
+            //Console.WriteLine((firstTime, secondTime));
+            //firstTime > secondTime
+            //increase to seconds
+
+            //Console.Write((firstTime, secondTime));
+            if (firstTime > secondTime) {
+                j++;
+            }
+
+            //over 100ms gap
+            //increase to firsts
+            else if (secondTime - firstTime > Consts.MAX_BANANA_GAP) {
+                i++;
+                
+            }
+
+            //100ms
+            else {
+                //secondTime == firstTime 이면
+                //타임갭을 1로
+
+                //같은 경우는 불가능한 것만 남았을 때 찾게 하기
+
+                timeGap = firstTime == secondTime ? 1 : secondTime - firstTime;
+
+                return (firstTime, secondTime, timeGap);
+            }
+        }
+
+
+        return (i, j, timeGap);
+    }
+}
