@@ -26,8 +26,7 @@
 		///  Required method for Designer support - do not modify
 		///  the contents of this method with the code editor.
 		/// </summary>
-		private void InitializeComponent()
-		{
+		private void InitializeComponent() {
 			beatmapPath = new Label();
 			fileTextBox = new TextBox();
 			browseButton = new Button();
@@ -37,13 +36,14 @@
 			allowedPixelError = new Label();
 			pixelErrorValue = new Label();
 			openCheckBox = new CheckBox();
+			reduceToOverlapCheckBox = new CheckBox();
 			((System.ComponentModel.ISupportInitialize)pixelErrorTrackBar).BeginInit();
 			SuspendLayout();
 			// 
 			// beatmapPath
 			// 
 			beatmapPath.AutoSize = true;
-			beatmapPath.Font = new Font("맑은 고딕", 10F);
+			beatmapPath.Font = new Font("맑은 고딕", 10F, FontStyle.Regular, GraphicsUnit.Point);
 			beatmapPath.Location = new Point(12, 11);
 			beatmapPath.Name = "beatmapPath";
 			beatmapPath.Size = new Size(96, 19);
@@ -53,7 +53,7 @@
 			// fileTextBox
 			// 
 			fileTextBox.BorderStyle = BorderStyle.FixedSingle;
-			fileTextBox.Font = new Font("맑은 고딕", 10F);
+			fileTextBox.Font = new Font("맑은 고딕", 10F, FontStyle.Regular, GraphicsUnit.Point);
 			fileTextBox.Location = new Point(114, 9);
 			fileTextBox.Name = "fileTextBox";
 			fileTextBox.Size = new Size(332, 25);
@@ -82,7 +82,6 @@
 			// randomDFSCheckBox
 			// 
 			randomDFSCheckBox.AutoSize = true;
-			randomDFSCheckBox.Enabled = false;
 			randomDFSCheckBox.Location = new Point(12, 91);
 			randomDFSCheckBox.Name = "randomDFSCheckBox";
 			randomDFSCheckBox.Size = new Size(177, 19);
@@ -102,7 +101,7 @@
 			// allowedPixelError
 			// 
 			allowedPixelError.AutoSize = true;
-			allowedPixelError.Font = new Font("맑은 고딕", 10F);
+			allowedPixelError.Font = new Font("맑은 고딕", 10F, FontStyle.Regular, GraphicsUnit.Point);
 			allowedPixelError.Location = new Point(12, 45);
 			allowedPixelError.Name = "allowedPixelError";
 			allowedPixelError.Size = new Size(125, 19);
@@ -121,12 +120,24 @@
 			// openCheckBox
 			// 
 			openCheckBox.AutoSize = true;
-			openCheckBox.Location = new Point(195, 91);
+			openCheckBox.Checked = true;
+			openCheckBox.CheckState = CheckState.Checked;
+			openCheckBox.Location = new Point(428, 91);
 			openCheckBox.Name = "openCheckBox";
 			openCheckBox.Size = new Size(109, 19);
 			openCheckBox.TabIndex = 8;
 			openCheckBox.Text = "Open result.txt ";
 			openCheckBox.UseVisualStyleBackColor = true;
+			// 
+			// reduceToOverlapCheckBox
+			// 
+			reduceToOverlapCheckBox.AutoSize = true;
+			reduceToOverlapCheckBox.Location = new Point(195, 91);
+			reduceToOverlapCheckBox.Name = "reduceToOverlapCheckBox";
+			reduceToOverlapCheckBox.Size = new Size(171, 19);
+			reduceToOverlapCheckBox.TabIndex = 9;
+			reduceToOverlapCheckBox.Text = "Reduce to overlap bananas";
+			reduceToOverlapCheckBox.UseVisualStyleBackColor = true;
 			// 
 			// Form1
 			// 
@@ -134,6 +145,7 @@
 			AutoScaleMode = AutoScaleMode.Font;
 			AutoSizeMode = AutoSizeMode.GrowAndShrink;
 			ClientSize = new Size(549, 122);
+			Controls.Add(reduceToOverlapCheckBox);
 			Controls.Add(openCheckBox);
 			Controls.Add(pixelErrorValue);
 			Controls.Add(allowedPixelError);
@@ -163,5 +175,6 @@
 		private Label allowedPixelError;
 		private Label pixelErrorValue;
 		private CheckBox openCheckBox;
+		private CheckBox reduceToOverlapCheckBox;
 	}
 }

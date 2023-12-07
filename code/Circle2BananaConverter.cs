@@ -1,16 +1,19 @@
 using OsuParsers.Beatmaps;
 using OsuParsers.Decoders;
+using System.Diagnostics;
 
 public static class Circle2BananaConverter {
 
     public static int pixelError = 4;
+
+	public static bool reduceToOverlap = false;
 
     public static Beatmap beatmap = new Beatmap();
 
     public static Random rand = new Random();
 
     public static MatchingTable minTable = new MatchingTable();
-    public static String ConvertToBanana(string path, int pixelError, bool randomDFS=false) {
+    public static String ConvertToBanana(string path, int pixelError, bool randomDFS=false, bool reduceToOverlap=false) {
         /*
         Part 1.
         비트맵 읽기
@@ -18,6 +21,7 @@ public static class Circle2BananaConverter {
         */
         beatmap = BeatmapDecoder.Decode(path);
         Circle2BananaConverter.pixelError = pixelError;
+		Circle2BananaConverter.reduceToOverlap = reduceToOverlap;
 
         /*
         Part 2.
@@ -52,7 +56,7 @@ public static class Circle2BananaConverter {
         Console.WriteLine(firstNodeDFSedTable.GetLastRNGCount());
 
         while (bananaManager.rngCount < firstNodeDFSedTable.GetLastRNGCount()) {
-            (int firstFruitX, int firstFruitTime, int secondFruitX, int secondFruitTime) = Find(bananaManager, fruits, pixelError);
+            (int firstFruitX, int firstFruitTime, int secondFruitX, int secondFruitTime) = Find(bananaManager, fruits);
 
             //일치하는 경우가 없을 때는 droplet
             if (firstFruitX == -1) {
@@ -97,7 +101,7 @@ public static class Circle2BananaConverter {
         MatchingTable matchingTable = new MatchingTable();
 
         while (fruits.RealCount > 0) {
-            (int firstFruitX, int firstFruitTime, int secondFruitX, int secondFruitTime) = Find(bananaManager, fruits, pixelError);
+            (int firstFruitX, int firstFruitTime, int secondFruitX, int secondFruitTime) = Find(bananaManager, fruits);
 
             //일치하는 경우가 없을 때는 droplet
             if (firstFruitX == -1) {
@@ -140,34 +144,85 @@ public static class Circle2BananaConverter {
         return matchingTable;
     }
 
-    private static (int, int, int, int) Find(BananaManager bananaManager, SortedHitObjects fruits, int pixelError) {
+    private static (int, int, int, int) Find(BananaManager bananaManager, SortedHitObjects fruits) {
         int firstBaseX = bananaManager.FirstBananaX;
         int secondBaseX = bananaManager.SecondBananaX;
 
-        int minI = firstBaseX - pixelError < 0 ? 0 : firstBaseX - pixelError;
-        int maxI = firstBaseX + pixelError > Consts.CATCH_WIDTH ? Consts.CATCH_WIDTH : firstBaseX + pixelError;
+		int minI = Math.Max(0, firstBaseX - pixelError);
+		int maxI = Math.Min(Consts.CATCH_WIDTH, firstBaseX + pixelError);
 
-        int minJ = secondBaseX - pixelError < 0 ? 0 : secondBaseX - pixelError;
-        int maxJ = secondBaseX + pixelError > Consts.CATCH_WIDTH ? Consts.CATCH_WIDTH : secondBaseX + pixelError;
+        int minJ = Math.Max(0, secondBaseX - pixelError);
+		int maxJ = Math.Min(Consts.CATCH_WIDTH, secondBaseX + pixelError);
+
+		(int, int, int, int) result = (-1, -1, -1, -1);
+        int resultPixelError = pixelError * 2 + 1;
 
         for (int i=minI; i<=maxI; i++) {
             for (int j=minJ; j<=maxJ; j++) {
+                int currentPixelError = Math.Abs(firstBaseX - i) + Math.Abs(secondBaseX - j);
+
                 List<int> firstTimes = fruits.GetPossibleTimes(i);
-                List<int> secondTimes = false ? fruits.GetPossibleTimes(j) : fruits.GetTimes(j);//fruits.IsPossible() ? fruits.GetPossibleTimes(j) : fruits.GetTimes(j);
+                List<int> secondTimes = reduceToOverlap == true ? fruits.GetPossibleTimes(j) : fruits.GetTimes(j);//fruits.IsPossible() ? fruits.GetPossibleTimes(j) : fruits.GetTimes(j);
 
                 (int firstFruitTime, int secondFruitTime) = Match(firstTimes, secondTimes);
 
                 if (firstFruitTime == -1)
                     continue;
 
-                return (i, firstFruitTime, j, secondFruitTime);
+				// 결과 픽셀 오차가 가장 작은 경우를 찾음
+				if (resultPixelError > currentPixelError) {
+					result = (i, firstFruitTime, j, secondFruitTime);
+					resultPixelError = currentPixelError;
+				}
             }
         }
 
-        return (-1, -1, -1, -1);
+        return result;
     }
 
-    private static void RandomDFS(SortedHitObjects fruits, MatchingTable baseTable, MatchingTable dfsTable) {
+
+	private static (int, int) Match(List<int> firsts, List<int> seconds) {
+		int i = 0;
+		int j = 0;
+
+		//Console.WriteLine("Matching " + (firsts.Count + seconds.Count));
+
+		if (firsts.Count == 0 || seconds.Count == 0)
+			return (-1, -1);
+
+		/*             i....
+        firsts  1001 2000 551313
+        seconds 1500 1800 2001 2010
+                            j..
+        */
+		while (i < firsts.Count && j < seconds.Count)
+		{
+			int firstTime = firsts[i];
+			int secondTime = seconds[j];
+
+			//Console.WriteLine((firstTime, secondTime));
+			//firstTime > secondTime
+			//increase to seconds
+
+			//Console.Write((firstTime, secondTime));
+			if (firstTime > secondTime)
+				j++;
+
+			//over 100ms gap
+			//increase to firsts
+			else if (secondTime - firstTime > Consts.MAX_BANANA_GAP)
+				i++;
+
+			//100ms
+			else
+				return (firstTime, secondTime);
+		}
+
+
+		return (-1, -1);
+	}
+
+	private static void RandomDFS(SortedHitObjects fruits, MatchingTable baseTable, MatchingTable dfsTable) {
         int min = baseTable.infos[0].rngCount;
 
         for (int i=0; i<baseTable.infos.Count; i++) {
@@ -221,21 +276,27 @@ public static class Circle2BananaConverter {
         }
 
         int k = possibleNodeIndexs[0] + 1;
-        MatchingInfo firstPossibleInfo = infos[k];
 
-        for (int i=k; i<infos.Count; i++) {
-            nextInfo = infos[i];
-            //처음 것부터 8 차이나는 것까지
-            if (nextInfo.rngCount - firstPossibleInfo.rngCount >= 8)
-                break;
-            
-            possibleNodeIndexs.Add(i);
-        }
+		if (k < infos.Count) {
+			MatchingInfo firstPossibleInfo = infos[k];
+
+			for (int i = k; i < infos.Count; i++) {
+				nextInfo = infos[i];
+				//처음 것부터 8 차이나는 것까지
+				if (nextInfo.rngCount - firstPossibleInfo.rngCount >= 8)
+					break;
+
+				possibleNodeIndexs.Add(i);
+			}
+		}
         
         //Random DFS?
         int randomIndex = rand.Next(0, possibleNodeIndexs.Count);
         int nextIndex = possibleNodeIndexs[randomIndex];
-        nextInfo = infos[nextIndex];
+
+		//Debug.WriteLine((possibleNodeIndexs.Count, randomIndex, nextIndex));
+
+		nextInfo = infos[nextIndex];
 
         bool firstResult = fruits.Visit(nextInfo.firstFruitX, nextInfo.firstFruitTime);
         bool secondResult = fruits.Visit(nextInfo.secondFruitX, nextInfo.secondFruitTime);
@@ -483,50 +544,6 @@ public static class Circle2BananaConverter {
         }
 
         return result;
-    }
-
-    private static (int, int) Match(List<int> firsts, List<int> seconds) {
-        int i = 0;
-        int j = 0;
-
-        //Console.WriteLine("Matching " + (firsts.Count + seconds.Count));
-
-        if (firsts.Count == 0 || seconds.Count == 0)
-            return (-1, -1);
-
-        /*             i....
-        firsts  1001 2000 551313
-        seconds 1500 1800 2001 2010
-                            j..
-        */
-        while (i < firsts.Count && j < seconds.Count) {
-            int firstTime = firsts[i];
-            int secondTime = seconds[j];
-
-            //Console.WriteLine((firstTime, secondTime));
-            //firstTime > secondTime
-            //increase to seconds
-
-            //Console.Write((firstTime, secondTime));
-            if (firstTime > secondTime) {
-                j++;
-            }
-
-            //over 100ms gap
-            //increase to firsts
-            else if (secondTime - firstTime > Consts.MAX_BANANA_GAP) {
-                i++;
-                
-            }
-
-            //100ms
-            else {
-                return (firstTime, secondTime);
-            }
-        }
-
-
-        return (-1, -1);
     }
 }
 

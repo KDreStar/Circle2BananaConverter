@@ -3,6 +3,7 @@
 ## 설명
 서클들로 바나나의 지점을 표시한 비트맵이 있으면   
 서클을 바나나로 전환 시키는 프로그램입니다.   
+thx for anapple7's idea ([Link](https://osu.ppy.sh/beatmapsets/2027002#fruits/4388958))   
 
 
 ## 요구사항
@@ -13,7 +14,7 @@ require to [.NET 6.0](https://dotnet.microsoft.com/en-us/download/dotnet/6.0) la
 ### 비트맵 설정
 - 결과를 붙여넣을 비트맵과 전환시킬 비트맵의 SliderTickRate, SliderMultiplier 값이 각각 같아야 합니다.   
 
-- 결과를 붙여넣을 비트맵에서 -10000ms 에 600 BPM 타이밍 포인트를 생성해야 합니다.
+- 결과를 붙여넣을 비트맵에서 가장 첫 부분에 600 BPM 타이밍 포인트를 생성해야 합니다.
 
 ### 프로그램 설명
 - Beatmap path   
@@ -108,7 +109,7 @@ private void createBananas(CancellationToken cancellationToken)
 | 401ms ~ 800ms | 9 |
 | 801ms ~ 1600ms | 17 |
 | ...            | ... |
-| T(n-1) + 1ms ~ Tms | A(n-1) * 2 - 1 |
+| T(n-1) + 1ms ~ T(n)ms | A(n-1) * 2 - 1 |
 
 T(0) = 0ms   
 T(1) = 100ms   
