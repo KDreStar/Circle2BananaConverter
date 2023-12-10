@@ -1,19 +1,18 @@
 using OsuParsers.Beatmaps;
 using OsuParsers.Decoders;
 using System.Diagnostics;
+using System.Security.Cryptography.X509Certificates;
 
 public static class Circle2BananaConverter {
 
     public static int pixelError = 4;
-
-	public static bool reduceToOverlap = false;
 
     public static Beatmap beatmap = new Beatmap();
 
     public static Random rand = new Random();
 
     public static MatchingTable minTable = new MatchingTable();
-    public static String ConvertToBanana(string path, int pixelError, bool randomDFS=false, bool reduceToOverlap=false) {
+    public static String ConvertToBanana(string path, int pixelError, bool randomDFS=false) {
         /*
         Part 1.
         비트맵 읽기
@@ -21,7 +20,6 @@ public static class Circle2BananaConverter {
         */
         beatmap = BeatmapDecoder.Decode(path);
         Circle2BananaConverter.pixelError = pixelError;
-		Circle2BananaConverter.reduceToOverlap = reduceToOverlap;
 
         /*
         Part 2.
@@ -36,6 +34,7 @@ public static class Circle2BananaConverter {
         Console.WriteLine(beatmap.ToString());
 
         if (randomDFS == false) {
+			RemoveOverlappedBananas(firstNodeDFSedTable);
             return DFSedTableToString(firstNodeDFSedTable);
         }
 
@@ -64,16 +63,15 @@ public static class Circle2BananaConverter {
                 continue;
             }
 
-            Console.WriteLine((bananaManager.rngCount, firstFruitX, firstFruitTime, secondFruitX, secondFruitTime));
+            Debug.WriteLine((bananaManager.rngCount, firstFruitX, firstFruitTime, secondFruitX, secondFruitTime));
             
             matchingTable.Add(new MatchingInfo(bananaManager.rngCount, firstFruitX, firstFruitTime, secondFruitX, secondFruitTime));
             bananaManager.ProceedForDroplet();
         }
 
-        MatchingTable dfsTable = new MatchingTable();
-        for (int i=0; i<100000; i++)
-            RandomDFS(fruits, matchingTable, dfsTable);
+		RandomBFS(matchingTable, fruits.RealCount, 5000);
 
+		RemoveOverlappedBananas(minTable);
         result = DFSedTableToString(minTable);
         /*
         Part 4.
@@ -162,7 +160,7 @@ public static class Circle2BananaConverter {
                 int currentPixelError = Math.Abs(firstBaseX - i) + Math.Abs(secondBaseX - j);
 
                 List<int> firstTimes = fruits.GetPossibleTimes(i);
-                List<int> secondTimes = reduceToOverlap == true ? fruits.GetPossibleTimes(j) : fruits.GetTimes(j);//fruits.IsPossible() ? fruits.GetPossibleTimes(j) : fruits.GetTimes(j);
+                List<int> secondTimes = fruits.GetTimes(j);//fruits.IsPossible() ? fruits.GetPossibleTimes(j) : fruits.GetTimes(j);
 
                 (int firstFruitTime, int secondFruitTime) = Match(firstTimes, secondTimes);
 
@@ -222,60 +220,141 @@ public static class Circle2BananaConverter {
 		return (-1, -1);
 	}
 
+
+	/*
+	 *    3   <--(1개, 2개)
+	 *  1
+	 *        
+	 *        1
+	 *     2
+	 *     2
+	 *  1
+	 *       2
+	 *    2     1
+	 * 1
+	 * 
+	 * 
+	 * 1
+	 *   2
+	 *     2    <
+	 *   2      <-- 둘중에 하나
+	 * 1
+	 *     
+	 * 조건 1
+	 * 한 곳에 바나나가 3개 있고 다른 바나나 쌍과 연결되어 있는 경우
+	 * x1 | time1 | x2 | time2
+	 *  1   100     2    150
+	 *  2   150     2    151(150)  <-- will remove
+	 *  
+	 *  
+	 *  ---------------------
+	 *  1   100     2    150
+	 *  2   150     3    240  <-- will remove
+	 *  3   240     4    300
+	 *  
+	 *  ---------------------
+	 *  1   100     2    150
+	 *  2   150     3    240  <-- will remove
+	 *  4   150     3    240
+	 *  
+	 *  
+	 *  (rngCount, first or second)
+	 *  
+	 *      O (146, second)
+	 *          O (12, second), (146, first)
+	 *      O (4, second), (12, first)
+	 *  O (4, first)
+	 *  
+	 *  간단하게 이걸 지울때, 튜플 개수가 1개라도 남으면 지울 수 있음
+	 *  바나나 카운트 배열을 만든 다음, 매칭 테이블을 찾으면서 지울 수 있는지 확인;
+	 * 
+	 */
+	private static void RemoveOverlappedBananas(MatchingTable table) {
+		//bananCounters[x][time] => bananaCount
+		BananaCounter bananaCounter = new BananaCounter();
+
+		//input
+		bananaCounter.Counting(table);
+
+		//check
+		for (int i=table.infos.Count - 1; i>=0; i--) {
+			MatchingInfo info = table.infos[i];
+
+			int x1 = info.firstFruitX;
+			int x2 = info.secondFruitX;
+
+			int t1 = info.firstFruitTime;
+			int t2 = info.secondFruitTime;
+
+			int prevRealCount = bananaCounter.realCount;
+
+			bananaCounter.Remove(x1, t1);
+			bananaCounter.Remove(x2, t2);
+
+			//remove
+			if (prevRealCount == bananaCounter.realCount) {
+				table.infos.RemoveAt(i);
+			} else { //restore
+				bananaCounter.Add(x1, t1);
+				bananaCounter.Add(x2, t2);
+			}
+		}
+	}
+
 	private static void RandomDFS(SortedHitObjects fruits, MatchingTable baseTable, MatchingTable dfsTable) {
-        int min = baseTable.infos[0].rngCount;
+		int min = baseTable.infos[0].rngCount;
 
-        for (int i=0; i<baseTable.infos.Count; i++) {
-            MatchingInfo nextInfo = baseTable.infos[i];
+		for (int i = 0; i < baseTable.infos.Count; i++) {
+			MatchingInfo nextInfo = baseTable.infos[i];
 
-            //처음 것부터 8 차이나는 것까지
-            if (nextInfo.rngCount - min >= 8)
-                break;
-            
-            DFS(fruits, baseTable, dfsTable, i);
-        }
-    }
+			//처음 것부터 8 차이나는 것까지
+			if (nextInfo.rngCount - min >= 8)
+				break;
 
-    private static void DFS(SortedHitObjects fruits, MatchingTable baseTable, MatchingTable dfsTable, int cur) {
-        //step 1. get possible nodes
+			DFS(fruits, baseTable, dfsTable, i);
+		}
+	}
 
-        List<MatchingInfo> infos = baseTable.infos;
-        MatchingInfo currentInfo = infos[cur];
-        MatchingInfo nextInfo;
+	private static void DFS(SortedHitObjects fruits, MatchingTable baseTable, MatchingTable dfsTable, int cur) {
+		//step 1. get possible nodes
 
-        //더 길면 탐색 종료
-        if (currentInfo.rngCount > minTable.GetLastRNGCount())
-            return;
+		List<MatchingInfo> infos = baseTable.infos;
+		MatchingInfo currentInfo = infos[cur];
+		MatchingInfo nextInfo;
 
-        //Console.Write((cur, currentInfo.rngCount));
+		//더 길면 탐색 종료
+		if (currentInfo.rngCount > minTable.GetLastRNGCount())
+			return;
 
-        dfsTable.Add(currentInfo);
+		//Console.Write((cur, currentInfo.rngCount));
 
-        //exit DFS
-        if (fruits.RealCount <= 0) {
-            minTable.Set(dfsTable);
-            dfsTable.RemoveLast();
-            return;
-        }
+		dfsTable.Add(currentInfo);
 
-        List<int> possibleNodeIndexs = new List<int>();
+		//exit DFS
+		if (fruits.RealCount <= 0) {
+			minTable.Set(dfsTable);
+			dfsTable.RemoveLast();
+			return;
+		}
 
-        for (int i=cur+1; i<infos.Count; i++) {
-            nextInfo = infos[i];
+		List<int> possibleNodeIndexs = new List<int>();
 
-            //처음 가능한 것 찾기
-            if (nextInfo.rngCount - Consts.MAX_RNG_LENGTH >= currentInfo.rngCount) {
-                possibleNodeIndexs.Add(i);
-                break;
-            }
-        }
+		for (int i = cur + 1; i < infos.Count; i++) {
+			nextInfo = infos[i];
 
-        if (possibleNodeIndexs.Count == 0) {
-            dfsTable.RemoveLast();
-            return;
-        }
+			//처음 가능한 것 찾기
+			if (nextInfo.rngCount - Consts.MAX_RNG_LENGTH >= currentInfo.rngCount) {
+				possibleNodeIndexs.Add(i);
+				break;
+			}
+		}
 
-        int k = possibleNodeIndexs[0] + 1;
+		if (possibleNodeIndexs.Count == 0) {
+			dfsTable.RemoveLast();
+			return;
+		}
+
+		int k = possibleNodeIndexs[0] + 1;
 
 		if (k < infos.Count) {
 			MatchingInfo firstPossibleInfo = infos[k];
@@ -289,8 +368,8 @@ public static class Circle2BananaConverter {
 				possibleNodeIndexs.Add(i);
 			}
 		}
-        
-        //Random DFS?
+
+		//Random DFS?
         int randomIndex = rand.Next(0, possibleNodeIndexs.Count);
         int nextIndex = possibleNodeIndexs[randomIndex];
 
@@ -310,34 +389,267 @@ public static class Circle2BananaConverter {
         if (secondResult == true)
             fruits.Visit(nextInfo.secondFruitX, nextInfo.secondFruitTime);
 
-        //Visit
-        /*
-        for (int i=0; i<possibleNodeIndexs.Count; i++) {
-            int possibleIndex = possibleNodeIndexs[i];
+		/*
+		//Visit
+		for (int i = 0; i < possibleNodeIndexs.Count; i++) {
+			int possibleIndex = possibleNodeIndexs[i];
 
-            nextInfo = infos[possibleIndex];
+			nextInfo = infos[possibleIndex];
 
-            bool firstResult = fruits.Visit(nextInfo.firstFruitX, nextInfo.firstFruitTime);
-            bool secondResult = fruits.Visit(nextInfo.secondFruitX, nextInfo.secondFruitTime);
+			bool firstResult = fruits.Visit(nextInfo.firstFruitX, nextInfo.firstFruitTime);
+			bool secondResult = fruits.Visit(nextInfo.secondFruitX, nextInfo.secondFruitTime);
 
-            //DFS
-            DFS(fruits, baseTable, dfsTable, possibleIndex);
+			//DFS
+			DFS(fruits, baseTable, dfsTable, possibleIndex);
 
-            if (firstResult == true)
-                fruits.UnVisit(nextInfo.firstFruitX, nextInfo.firstFruitTime);
+			if (firstResult == true)
+				fruits.UnVisit(nextInfo.firstFruitX, nextInfo.firstFruitTime);
 
-            if (secondResult == true)
-                fruits.Visit(nextInfo.secondFruitX, nextInfo.secondFruitTime);
-        }
-        */
+			if (secondResult == true)
+				fruits.Visit(nextInfo.secondFruitX, nextInfo.secondFruitTime);
+		}
+		*/
+
+		dfsTable.RemoveLast();
+	}
 
 
-        dfsTable.RemoveLast();
-    }
+	private static void BFS(SortedHitObjects fruits, MatchingTable baseTable) {
 
-    private static void RandomBFS() {
+		//각 정보마다 BananaCounter를 저장
+		Queue<List<(int, BananaCounter)>> queue = new Queue<List<(int, BananaCounter)>>();
 
-    }
+		while (true) {
+
+
+
+		}
+	}
+
+	//많이 지우는 것만 남김
+	//+ Queue 용량 제한 
+	private static void RandomBFS(MatchingTable baseTable, int fruitCount, int maxQueueLength=100000) {
+		BananaCounter bananaCounter = new BananaCounter();
+
+		//방문 순서의 index들이 있음
+		//ex) [0, 8, 16] [0, 9, 17] [1, 9, 17] ...
+		Queue<List<int>> queue = new Queue<List<int>>();
+
+		List<MatchingInfo> infos = baseTable.infos;
+
+		int min = baseTable.infos[0].rngCount;
+
+		for (int i = 0; i < infos.Count; i++) {
+			MatchingInfo nextInfo = infos[i];
+
+			//처음 것부터 8 차이나는 것까지
+			if (nextInfo.rngCount - min >= 8)
+				break;
+
+			queue.Enqueue(new List<int> { i });
+		}
+
+		int total = 0;
+		int currentMaxRealCount = -1;
+
+		while (queue.Count > 0) {
+			int count = queue.Count;
+			total++;
+
+			Debug.WriteLine(total);
+
+			List<List<int>> tempList = new List<List<int>>();
+
+			for (int i = 0; i < count; i++) {
+				List<int> baseIndexs = queue.Dequeue();
+				int currentIndex = baseIndexs[baseIndexs.Count - 1];
+
+				/*
+				for (int j=0; j<baseIndexs.Count; j++) {
+					Debug.Write(baseIndexs[j] + " ");
+				}
+
+				Debug.WriteLine("");
+				*/
+
+				MatchingInfo currentInfo = infos[currentIndex];
+
+				//Debug.WriteLine("current: " + currentIndex);
+
+				//바나나 시뮬레이션
+				bananaCounter.Counting(baseTable, baseIndexs);
+
+				if (fruitCount == bananaCounter.realCount) {
+					minTable.Set(baseTable, baseIndexs);
+					return;
+					//종료
+				}
+
+				int realCount = bananaCounter.realCount;
+
+				//시뮬후에 원래대로
+				bananaCounter.UnCounting(baseTable, baseIndexs);
+	
+				currentMaxRealCount = Math.Max(currentMaxRealCount, realCount);
+
+				//많지 않은거 그냥 버림
+				//if (currentMaxRealCount > realCount)
+				//	continue;
+
+				int firstPossibleIndex = infos.Count; //밑에서 못찾으면 그냥 끝
+
+				//rngCount + 8보다 크거나 같은것 중에 가장 작은 index 찾기
+				for (int j = currentIndex + 1; j < infos.Count; j++) {
+					MatchingInfo nextInfo = infos[j];
+
+					if (nextInfo.rngCount >= currentInfo.rngCount + Consts.MAX_RNG_LENGTH) {
+						//Debug.WriteLine("firstPossible:" + j + "nextInfo.rngCount:" + nextInfo.rngCount + "CurrentInfo.count:" + currentInfo.rngCount);
+						firstPossibleIndex = j;
+						break;
+					}
+				}
+
+				//찾지 못한 경우
+				if (firstPossibleIndex >= infos.Count)
+					continue;
+
+
+				MatchingInfo firstPossibleInfo = infos[firstPossibleIndex];
+
+				//Enqueue
+				for (int j = firstPossibleIndex; j < infos.Count; j++) {
+					MatchingInfo nextInfo = infos[j];
+
+					//처음 rngCount + 8 미만의 값 까지만
+					if (nextInfo.rngCount - Consts.MAX_RNG_LENGTH < firstPossibleInfo.rngCount) {
+						List<int> newIndexs = new List<int>();
+
+						newIndexs.AddRange(baseIndexs);
+						newIndexs.Add(j);
+
+						tempList.Add(newIndexs);
+					}
+				}
+			}
+
+			if (tempList.Count < maxQueueLength) {
+				for (int i=0; i < tempList.Count; i++) {
+					queue.Enqueue(tempList[i]);
+				}
+
+				continue;
+			}
+
+			//maxQueueLength 이상인 경우 랜덤하게 추출
+			for (int i=0; i<maxQueueLength; i++) {
+				int randomIndex = rand.Next(tempList.Count - i);
+
+				queue.Enqueue(tempList[randomIndex]);
+
+				//swap
+				int lastIndex = tempList.Count - 1 - i;
+				var temp = tempList[randomIndex];
+				tempList[randomIndex] = tempList[lastIndex];
+				tempList[lastIndex] = temp;
+			}
+		}
+	}
+
+	//Too long
+	private static void BFSReducedMemoryVer(SortedHitObjects fruits, MatchingTable baseTable) {
+		BananaCounter bananaCounter = new BananaCounter();
+
+		//방문 순서의 index들이 있음
+		//ex) [0, 8, 16] [0, 9, 17] [1, 9, 17] ...
+		Queue<List<int>> queue = new Queue<List<int>>();
+
+		List<MatchingInfo> infos = baseTable.infos;
+
+		int min = baseTable.infos[0].rngCount;
+
+		for (int i = 0; i < infos.Count; i++) {
+			MatchingInfo nextInfo = infos[i];
+
+			//처음 것부터 8 차이나는 것까지
+			if (nextInfo.rngCount - min >= 8)
+				break;
+
+			queue.Enqueue(new List<int> { i });
+		}
+
+		int total = 0;
+
+		while (queue.Count > 0) {
+			int count = queue.Count;
+			total++;
+
+			Debug.WriteLine(total);
+
+			for (int i=0; i<count; i++) {
+				List<int> baseIndexs = queue.Dequeue();
+				int currentIndex = baseIndexs[baseIndexs.Count - 1];
+
+				/*
+				for (int j=0; j<baseIndexs.Count; j++) {
+					Debug.Write(baseIndexs[j] + " ");
+				}
+
+				Debug.WriteLine("");
+				*/
+
+				MatchingInfo currentInfo = infos[currentIndex];
+
+				//Debug.WriteLine("current: " + currentIndex);
+
+				//바나나 시뮬레이션
+				bananaCounter.Counting(baseTable, baseIndexs);
+
+				if (fruits.RealCount == bananaCounter.realCount) {
+					minTable.Set(baseTable, baseIndexs);
+					return;
+					//종료
+				}
+
+				//시뮬후에 원래대로
+				bananaCounter.UnCounting(baseTable, baseIndexs);
+
+				int firstPossibleIndex = infos.Count; //밑에서 못찾으면 그냥 끝
+
+				//rngCount + 8보다 크거나 같은것 중에 가장 작은 index 찾기
+				for (int j = currentIndex + 1; j<infos.Count; j++) {
+					MatchingInfo nextInfo = infos[j];
+
+					if (nextInfo.rngCount >= currentInfo.rngCount + Consts.MAX_RNG_LENGTH) {
+						//Debug.WriteLine("firstPossible:" + j + "nextInfo.rngCount:" + nextInfo.rngCount + "CurrentInfo.count:" + currentInfo.rngCount);
+						firstPossibleIndex = j;
+						break;
+					}
+				}
+
+				//찾지 못한 경우
+				if (firstPossibleIndex >= infos.Count)
+					continue;
+
+
+				MatchingInfo firstPossibleInfo = infos[firstPossibleIndex];
+
+				//Enqueue
+				for (int j = firstPossibleIndex;  j < infos.Count; j++) {
+					MatchingInfo nextInfo = infos[j];
+
+					//처음 rngCount + 8 미만의 값 까지만
+					if (nextInfo.rngCount - Consts.MAX_RNG_LENGTH < firstPossibleInfo.rngCount) {
+						List<int> newIndexs = new List<int>();
+
+						newIndexs.AddRange(baseIndexs);
+						newIndexs.Add(j);
+
+						queue.Enqueue(newIndexs);
+					}
+				}
+			}
+		}
+	}
 
     private static string DFSedTableToString(MatchingTable dfsedTable) {
         int currentRNGCount = 0;
@@ -346,168 +658,6 @@ public static class Circle2BananaConverter {
         for (int i=0; i<dfsedTable.infos.Count; i++) {
             MatchingInfo info = dfsedTable.infos[i];
 
-            /*
-            idk
-            how it works at 3 billions ms
-
-            hard coding
-
-            BPM 100
-            length | repeat | dropletCount
-                50 | 1      | 1 tick 0
-                50 | 2      | 2
-                50 | 3      | 4
-                50 | 4      | 5
-                50 | 5      | 6
-                50 | 6      | 8
-                50 | 7      | 9
-                50 | 8      | 10
-                50 | 9      | 12
-                50 | 10     | 13
-                50 | 11     | 15
-                50 | 12     | 16
-
-                ..
-
-                50 | 44 | 
-
-
-                60 | 1      | 2
-                60 | 2      | 3
-                60 | 9      | 16
-
-
-                100 | 1     | 3 tick 0
-                100 | 2     | 7
-                100 | 3     | 11
-                100 | 4     | 14
-
-                50 | 1      | 1 tick 0
-
-                100 | 1     | 3 tick 0
-
-                150 | 1     | 6 tick 1   / 3 / 2 
-
-                200 | 1     | 8 tick 1  / 3 / 4?
-
-                250 | 1     | 10 tick 2   3 3 2
-
-                300 | 1     | 13 tick 2   3 3 4
-
-                350 | 1     | 15 tick 3   3 3 3 3
-
-                400 | 1     | 17 tick 3   3 3 4 4
-
-                450 | 1     | 20 tick 4   3 3 3 3 4
-
-                500 | 1     | 22 tick 4   3 3 4 4 4
-
-                550 | 1     | 25 tick 5
-
-                if (sinceLastTick > 80) {
-                    double timeBetweenTiny = sinceLastTick;
-
-                    while (timeBetweenTiny > 100)
-                        timeBetweenTiny /= 2;
-
-                    for (double t = timeBetweenTiny; t < sinceLastTick; t += timeBetweenTiny)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-
-                        AddNested(new TinyDroplet
-                        {
-                            StartTime = t + lastEvent.Value.Time,
-                            X = ClampToPlayfield(EffectiveX + Path.PositionAt(
-                                lastEvent.Value.PathProgress + (t / sinceLastTick) * (e.PathProgress - lastEvent.Value.PathProgress)).X),
-                        });
-                    }
-                }
-
-                idk
-
-                59 1
-                60 2
-                ~
-                71 2
-                72 inf loop
-                ~
-                91 inf loop
-                92 3
-                ~
-                101 3
-                102 5
-                ~
-                139 5
-                140 inf loop
-
-
-
-                L  | R  | D
-                50 | 1  | 1
-                50 | 2  | 2
-                50 | 3  | 4
-                50 | 6  | 8
-                50 | 12 | 16
-                50 | 24 | 32
-                50 | 48 | 64
-
-
-                BPM 200 tickRate = 2
-
-                1 0
-                ~
-                33 0
-                33.333 0
-                33.34 inf <- 100 / 3
-                34 inf
-                ~
-                53 inf
-                53.3 inf
-                53.4 4
-                54 4
-                ~
-                56 4 
-                57 6
-                66 6
-
-                BPM 200 tickRate = 1
-
-                1. 틱이 생성이 안되는 거리면 무한루프
-
-                -214700000
-                -2147000000
-                -2147481300
-                -2147481400
-
-                -2147481835 .. .
-                -2147481836 . ..
-
-                -2147481844 . .
-                -2147481847 (max)
-                -2147481848 (skiped)
-
-                작은 씨앗때문에 생기는 오류 같으므로
-                BPM=600 으로 하고 큰 씨앗만 생성되게 하기
-
-                384 = a * b
-
-                tickRate | min sliderlength for it is showed 1 big droplet
-                       1 | 100
-                       2 | 50
-                       3 | 33.3
-                       4 | 25
-
-                if (repeat count * slider length > 60000)
-                    fail to load the beatmap
-            */
-
-            /* 
-            시작 0
-
-            테이블이 4 라면
-
-            droplet 4개 추가
-            */
             if (info.rngCount > currentRNGCount) {
                 int dropletCount = info.rngCount - currentRNGCount;
 

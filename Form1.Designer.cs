@@ -36,7 +36,6 @@
 			allowedPixelError = new Label();
 			pixelErrorValue = new Label();
 			openCheckBox = new CheckBox();
-			reduceToOverlapCheckBox = new CheckBox();
 			((System.ComponentModel.ISupportInitialize)pixelErrorTrackBar).BeginInit();
 			SuspendLayout();
 			// 
@@ -129,23 +128,12 @@
 			openCheckBox.Text = "Open result.txt ";
 			openCheckBox.UseVisualStyleBackColor = true;
 			// 
-			// reduceToOverlapCheckBox
-			// 
-			reduceToOverlapCheckBox.AutoSize = true;
-			reduceToOverlapCheckBox.Location = new Point(195, 91);
-			reduceToOverlapCheckBox.Name = "reduceToOverlapCheckBox";
-			reduceToOverlapCheckBox.Size = new Size(171, 19);
-			reduceToOverlapCheckBox.TabIndex = 9;
-			reduceToOverlapCheckBox.Text = "Reduce to overlap bananas";
-			reduceToOverlapCheckBox.UseVisualStyleBackColor = true;
-			// 
 			// Form1
 			// 
 			AutoScaleDimensions = new SizeF(7F, 15F);
 			AutoScaleMode = AutoScaleMode.Font;
 			AutoSizeMode = AutoSizeMode.GrowAndShrink;
 			ClientSize = new Size(549, 122);
-			Controls.Add(reduceToOverlapCheckBox);
 			Controls.Add(openCheckBox);
 			Controls.Add(pixelErrorValue);
 			Controls.Add(allowedPixelError);
@@ -175,6 +163,5 @@
 		private Label allowedPixelError;
 		private Label pixelErrorValue;
 		private CheckBox openCheckBox;
-		private CheckBox reduceToOverlapCheckBox;
 	}
 }

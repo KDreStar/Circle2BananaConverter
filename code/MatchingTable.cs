@@ -18,7 +18,18 @@ public class MatchingTable {
             this.infos.Add(infos[i]);
     }
 
-    public int GetLastRNGCount() {
+	public void Set(MatchingTable table, List<int> indexs) {
+		List<MatchingInfo> infos = table.infos;
+
+		this.infos.Clear();
+
+		for (int i = 0; i < indexs.Count; i++) {
+			int currentIndex = indexs[i];
+			this.infos.Add(infos[currentIndex]);
+		}
+	}
+
+	public int GetLastRNGCount() {
         return infos[infos.Count - 1].rngCount;
     }
 }

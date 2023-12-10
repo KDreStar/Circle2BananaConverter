@@ -46,10 +46,9 @@ namespace Circle_2_Banana_Converter
 
 			int pixelError = pixelErrorTrackBar.Value;
 			bool randomDFS = randomDFSCheckBox.Checked;
-			bool reduceToOverlap = reduceToOverlapCheckBox.Checked;
 
             StreamWriter sw = new StreamWriter("result.txt");
-            sw.Write(Circle2BananaConverter.ConvertToBanana(fileName, pixelError, randomDFS, reduceToOverlap));
+            sw.Write(Circle2BananaConverter.ConvertToBanana(fileName, pixelError, randomDFS));
             sw.Close();
 
 			MessageBox.Show("Complete");
