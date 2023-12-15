@@ -1,7 +1,5 @@
-﻿namespace Circle_2_Banana_Converter
-{
-	partial class Form1
-	{
+﻿namespace Circle_2_Banana_Converter {
+	partial class Form1 {
 		/// <summary>
 		///  Required designer variable.
 		/// </summary>
@@ -11,10 +9,8 @@
 		///  Clean up any resources being used.
 		/// </summary>
 		/// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
-		protected override void Dispose(bool disposing)
-		{
-			if (disposing && (components != null))
-			{
+		protected override void Dispose(bool disposing) {
+			if (disposing && (components != null)) {
 				components.Dispose();
 			}
 			base.Dispose(disposing);
@@ -35,8 +31,11 @@
 			pixelErrorTrackBar = new TrackBar();
 			allowedPixelError = new Label();
 			pixelErrorValue = new Label();
-			openCheckBox = new CheckBox();
+			groupBox1 = new GroupBox();
+			dummySpinnerButton = new RadioButton();
+			noneButton = new RadioButton();
 			((System.ComponentModel.ISupportInitialize)pixelErrorTrackBar).BeginInit();
+			groupBox1.SuspendLayout();
 			SuspendLayout();
 			// 
 			// beatmapPath
@@ -81,7 +80,7 @@
 			// randomDFSCheckBox
 			// 
 			randomDFSCheckBox.AutoSize = true;
-			randomDFSCheckBox.Location = new Point(12, 91);
+			randomDFSCheckBox.Location = new Point(227, 100);
 			randomDFSCheckBox.Name = "randomDFSCheckBox";
 			randomDFSCheckBox.Size = new Size(177, 19);
 			randomDFSCheckBox.TabIndex = 4;
@@ -116,25 +115,46 @@
 			pixelErrorValue.TabIndex = 7;
 			pixelErrorValue.Text = "5";
 			// 
-			// openCheckBox
+			// groupBox1
 			// 
-			openCheckBox.AutoSize = true;
-			openCheckBox.Checked = true;
-			openCheckBox.CheckState = CheckState.Checked;
-			openCheckBox.Location = new Point(428, 91);
-			openCheckBox.Name = "openCheckBox";
-			openCheckBox.Size = new Size(109, 19);
-			openCheckBox.TabIndex = 8;
-			openCheckBox.Text = "Open result.txt ";
-			openCheckBox.UseVisualStyleBackColor = true;
+			groupBox1.Controls.Add(dummySpinnerButton);
+			groupBox1.Controls.Add(noneButton);
+			groupBox1.Location = new Point(12, 77);
+			groupBox1.Name = "groupBox1";
+			groupBox1.Size = new Size(200, 71);
+			groupBox1.TabIndex = 9;
+			groupBox1.TabStop = false;
+			groupBox1.Text = "Option to reduce lag";
+			// 
+			// dummySpinnerButton
+			// 
+			dummySpinnerButton.AutoSize = true;
+			dummySpinnerButton.Location = new Point(6, 47);
+			dummySpinnerButton.Name = "dummySpinnerButton";
+			dummySpinnerButton.Size = new Size(153, 19);
+			dummySpinnerButton.TabIndex = 1;
+			dummySpinnerButton.Text = "Create dummy spinners";
+			dummySpinnerButton.UseVisualStyleBackColor = true;
+			// 
+			// noneButton
+			// 
+			noneButton.AutoSize = true;
+			noneButton.Checked = true;
+			noneButton.Location = new Point(6, 22);
+			noneButton.Name = "noneButton";
+			noneButton.Size = new Size(54, 19);
+			noneButton.TabIndex = 0;
+			noneButton.TabStop = true;
+			noneButton.Text = "None";
+			noneButton.UseVisualStyleBackColor = true;
 			// 
 			// Form1
 			// 
 			AutoScaleDimensions = new SizeF(7F, 15F);
 			AutoScaleMode = AutoScaleMode.Font;
 			AutoSizeMode = AutoSizeMode.GrowAndShrink;
-			ClientSize = new Size(549, 122);
-			Controls.Add(openCheckBox);
+			ClientSize = new Size(549, 158);
+			Controls.Add(groupBox1);
 			Controls.Add(pixelErrorValue);
 			Controls.Add(allowedPixelError);
 			Controls.Add(pixelErrorTrackBar);
@@ -148,6 +168,8 @@
 			Name = "Form1";
 			Text = "Circle 2 Banana Converter";
 			((System.ComponentModel.ISupportInitialize)pixelErrorTrackBar).EndInit();
+			groupBox1.ResumeLayout(false);
+			groupBox1.PerformLayout();
 			ResumeLayout(false);
 			PerformLayout();
 		}
@@ -163,5 +185,8 @@
 		private Label allowedPixelError;
 		private Label pixelErrorValue;
 		private CheckBox openCheckBox;
+		private GroupBox groupBox1;
+		private RadioButton dummySpinnerButton;
+		private RadioButton noneButton;
 	}
 }

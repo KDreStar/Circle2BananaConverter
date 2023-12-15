@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -14,6 +15,13 @@ public class BananaCounter {
 		for (int i = 0; i < counter.Length; i++) {
 			counter[i] = new Dictionary<int, int>();
 		}
+	}
+
+	public int Get(int x, int time) {
+		if (counter[x].ContainsKey(time) == false)
+			return 0;
+
+		return counter[x][time];
 	}
 
 	public void Add(int x, int time) {
@@ -52,6 +60,20 @@ public class BananaCounter {
 		Counting(table, indexs);
 	}
 
+	public void Print() {
+		for (int i = 0; i <= 512; i++) {
+			if (counter[i].Count == 0)
+				continue;
+
+			foreach (KeyValuePair<int, int> pair in counter[i])
+				Debug.Write((i, pair.Key, pair.Value));
+			Debug.WriteLine("");
+		}
+	}
+
+	public void Counting(MatchingTable table, int index) {
+		Counting(table, new List<int>() { index });
+	}
 
 	public void Counting(MatchingTable table, List<int> indexs) {
 		for (int i=0; i<indexs.Count; i++) {

@@ -348,4 +348,134 @@ public static class Circle2BananaConverter {
 
         return (i, j, timeGap);
     }
+
+	
+	//많이 지우는 것만 남김
+	//+ Queue 용량 제한 
+	private static void RandomBFS(MatchingTable baseTable, int fruitCount, int maxQueueLength=100000) {
+		BananaCounter bananaCounter = new BananaCounter();
+
+		//방문 순서의 index들이 있음
+		//ex) [0, 8, 16] [0, 9, 17] [1, 9, 17] ...
+		Queue<List<int>> queue = new Queue<List<int>>();
+
+		List<MatchingInfo> infos = baseTable.infos;
+
+		int min = baseTable.infos[0].rngCount;
+
+		for (int i = 0; i < infos.Count; i++) {
+			MatchingInfo nextInfo = infos[i];
+
+			//처음 것부터 8 차이나는 것까지
+			if (nextInfo.rngCount - min >= 8)
+				break;
+
+			queue.Enqueue(new List<int> { i });
+		}
+
+		int total = 0;
+		int currentMaxRealCount = -1;
+
+		while (queue.Count > 0) {
+			int count = queue.Count;
+			total++;
+
+			Debug.WriteLine(total);
+
+			List<List<int>> tempList = new List<List<int>>();
+
+			for (int i = 0; i < count; i++) {
+				List<int> baseIndexs = queue.Dequeue();
+				int currentIndex = baseIndexs[baseIndexs.Count - 1];
+
+				/*
+				for (int j=0; j<baseIndexs.Count; j++) {
+					Debug.Write(baseIndexs[j] + " ");
+				}
+
+				Debug.WriteLine("");
+				*/
+
+				MatchingInfo currentInfo = infos[currentIndex];
+
+				//Debug.WriteLine("current: " + currentIndex);
+
+				//바나나 시뮬레이션
+				bananaCounter.Counting(baseTable, baseIndexs);
+
+				if (fruitCount == bananaCounter.realCount) {
+					minTable.Set(baseTable, baseIndexs);
+					return;
+					//종료
+				}
+
+				int realCount = bananaCounter.realCount;
+
+				//시뮬후에 원래대로
+				bananaCounter.UnCounting(baseTable, baseIndexs);
+	
+				currentMaxRealCount = Math.Max(currentMaxRealCount, realCount);
+
+				//많지 않은거 그냥 버림
+				//if (currentMaxRealCount > realCount)
+				//	continue;
+
+				int firstPossibleIndex = infos.Count; //밑에서 못찾으면 그냥 끝
+
+				//rngCount + 8보다 크거나 같은것 중에 가장 작은 index 찾기
+				for (int j = currentIndex + 1; j < infos.Count; j++) {
+					MatchingInfo nextInfo = infos[j];
+
+					if (nextInfo.rngCount >= currentInfo.rngCount + Consts.MAX_RNG_LENGTH) {
+						//Debug.WriteLine("firstPossible:" + j + "nextInfo.rngCount:" + nextInfo.rngCount + "CurrentInfo.count:" + currentInfo.rngCount);
+						firstPossibleIndex = j;
+						break;
+					}
+				}
+
+				//찾지 못한 경우
+				if (firstPossibleIndex >= infos.Count)
+					continue;
+
+
+				MatchingInfo firstPossibleInfo = infos[firstPossibleIndex];
+
+				//Enqueue
+				for (int j = firstPossibleIndex; j < infos.Count; j++) {
+					MatchingInfo nextInfo = infos[j];
+
+					//처음 rngCount + 8 미만의 값 까지만
+					if (nextInfo.rngCount - Consts.MAX_RNG_LENGTH < firstPossibleInfo.rngCount) {
+						List<int> newIndexs = new List<int>();
+
+						newIndexs.AddRange(baseIndexs);
+						newIndexs.Add(j);
+
+						tempList.Add(newIndexs);
+					}
+				}
+			}
+
+			if (tempList.Count < maxQueueLength) {
+				for (int i=0; i < tempList.Count; i++) {
+					queue.Enqueue(tempList[i]);
+				}
+
+				continue;
+			}
+
+			//maxQueueLength 이상인 경우 랜덤하게 추출
+			for (int i=0; i<maxQueueLength; i++) {
+				int randomIndex = rand.Next(tempList.Count - i);
+
+				queue.Enqueue(tempList[randomIndex]);
+
+				//swap
+				int lastIndex = tempList.Count - 1 - i;
+				var temp = tempList[randomIndex];
+				tempList[randomIndex] = tempList[lastIndex];
+				tempList[lastIndex] = temp;
+			}
+		}
+	}
 }

@@ -1,41 +1,51 @@
 using OsuParsers.Beatmaps;
+using OsuParsers.Beatmaps.Objects;
+using OsuParsers.Beatmaps.Sections.Events;
+using OsuParsers.Database.Objects;
 using OsuParsers.Decoders;
 using System.Diagnostics;
+using System.Linq;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.RegularExpressions;
 
 public static class Circle2BananaConverter {
-
-    public static int pixelError = 4;
 
     public static Beatmap beatmap = new Beatmap();
 
     public static Random rand = new Random();
 
     public static MatchingTable minTable = new MatchingTable();
-    public static String ConvertToBanana(string path, int pixelError, bool randomDFS=false) {
+
+	public static ConvertOption? option;
+    public static void ConvertToBanana(string path, ConvertOption option) {
         /*
         Part 1.
         비트맵 읽기
         Read to beatmap
         */
         beatmap = BeatmapDecoder.Decode(path);
-        Circle2BananaConverter.pixelError = pixelError;
+        Circle2BananaConverter.option = option;
 
-        /*
-        Part 2.
-        X: indexing
-        time: sort (asc)
-        */
+		InsertBPM(beatmap);
 
-        MatchingTable firstNodeDFSedTable = PreProcessing();
+		beatmap.MetadataSection.Version += "(Converted)";
 
-        string result = "";
+		beatmap.EventsSection.Breaks = new List<BeatmapBreakEvent>();
 
-        Console.WriteLine(beatmap.ToString());
 
-        if (randomDFS == false) {
+		/*
+		Part 2.
+		DFS (only visit first node)
+		*/
+		MatchingTable firstNodeDFSedTable = PreProcessing();
+
+        if (option.findMoreRoutes == false) {
 			RemoveOverlappedBananas(firstNodeDFSedTable);
-            return DFSedTableToString(firstNodeDFSedTable);
+
+			beatmap.HitObjects = new List<HitObject>();
+
+			Save(path, beatmap, firstNodeDFSedTable);
+			return; 
         }
 
         //idk how to optimize this
@@ -69,10 +79,14 @@ public static class Circle2BananaConverter {
             bananaManager.ProceedForDroplet();
         }
 
-		RandomBFS(matchingTable, fruits.RealCount, 5000);
+		//for (int i = 0; i < 10000; i++)
+		//	RandomDFS(fruits, matchingTable, firstNodeDFSedTable);
+		
+		ReducedMemoryGreedyBFS(matchingTable, fruits.RealCount, 1000);
 
 		RemoveOverlappedBananas(minTable);
-        result = DFSedTableToString(minTable);
+
+		Save(path, beatmap, matchingTable);
         /*
         Part 4.
         Export
@@ -87,8 +101,61 @@ public static class Circle2BananaConverter {
         Console.WriteLine("Complete" + (firstNodeDFSedTable.GetLastRNGCount(), minTable.GetLastRNGCount()));
 
 
-        return result;
     }
+
+	private static void Save(string path, Beatmap beatmap, MatchingTable table) {
+		string pattern = @"].osu";
+		string newFileName = Path.GetFileName(path);
+
+		newFileName = Regex.Replace(newFileName, pattern, " (Converted)].osu");
+		string finalPath = Path.Combine(Path.GetDirectoryName(path), newFileName);
+
+		beatmap.Save(finalPath);
+
+		if (File.Exists(finalPath) == false)
+			return;
+
+		StreamWriter sw = File.AppendText(finalPath);
+
+		sw.Write(TableToString(table));
+		sw.Close();
+	}
+
+	private static void InsertBPM(Beatmap beatmap) {
+		int i;
+		int baseBeatLength = 100;
+		int offset;
+		int beatLength;
+
+		for (i=0; i<beatmap.TimingPoints.Count; i++) {
+			var timingPoint = beatmap.TimingPoints[i];
+
+			offset = timingPoint.Offset;
+			beatLength = (int)Math.Round(timingPoint.BeatLength);
+
+			if (offset >= -10000)
+				break;
+		}
+
+		offset = beatmap.TimingPoints[i].Offset;
+		beatLength = (int)Math.Round(beatmap.TimingPoints[i].BeatLength);
+
+		if (offset == -10000 && beatLength == baseBeatLength)
+			return;
+
+		var temp = new TimingPoint();
+
+		temp.BeatLength = baseBeatLength;
+		temp.Offset = -10000;
+		temp.Inherited = false;
+		temp.Effects = beatmap.TimingPoints[i].Effects;
+		temp.SampleSet = beatmap.TimingPoints[i].SampleSet;
+		temp.CustomSampleSet = beatmap.TimingPoints[i].CustomSampleSet;
+		temp.Volume = beatmap.TimingPoints[i].Volume;
+		temp.TimeSignature = beatmap.TimingPoints[i].TimeSignature;
+
+		beatmap.TimingPoints.Insert(i, temp);
+	}
 
     //첫번째 노드만 돌아서 나온 table 생성의 최솟값을 얻음
     private static MatchingTable PreProcessing() {
@@ -145,6 +212,7 @@ public static class Circle2BananaConverter {
     private static (int, int, int, int) Find(BananaManager bananaManager, SortedHitObjects fruits) {
         int firstBaseX = bananaManager.FirstBananaX;
         int secondBaseX = bananaManager.SecondBananaX;
+		int pixelError = option.pixelError;
 
 		int minI = Math.Max(0, firstBaseX - pixelError);
 		int maxI = Math.Min(Consts.CATCH_WIDTH, firstBaseX + pixelError);
@@ -426,10 +494,33 @@ public static class Circle2BananaConverter {
 		}
 	}
 
-	//많이 지우는 것만 남김
-	//+ Queue 용량 제한 
-	private static void RandomBFS(MatchingTable baseTable, int fruitCount, int maxQueueLength=100000) {
+	/*
+	 * 그리디 하게 선택
+	 * 1. (0,2,4) -> (28) -> (58, 59, ...)
+	 * 1개로 밖에 노드가 안이어져 있다면 반드시 거기로 가는게 효율적이다.
+	 * 
+	 * 2. 테이블에 있는 매칭정보로 모든 바나나를 기록 했을 때,
+	 * 그 위치의 바나나 개수가 적다면 (1개라면)
+	 * 1개면 무조건 선택해야 한다
+	 * 2개~ 면 선택을 할 확률이 높아진다.
+	 * 
+	 * 3. 0, 8, 9, 16 이 있을때
+	 * 16에 바나나 1개짜리의 정보
+	 * 8에는 바나나 50개짜리의 정보
+	 * 9에는 바나나 2개짜리의 정보가 있을때
+	 * 
+	 * 0->9 로 가버리면 16을 찾지 못하여 답이 안나올 수가 있다
+	 * 
+	 * => 바나나 빈도수로 테이블을 정렬
+	 * 빈도 수가 1인것부터 BFS
+	 * 
+	 */
+	private static void ReducedMemoryGreedyBFS(MatchingTable baseTable, int fruitCount, int maxQueueLength = 100000) {
+		BananaCounter bananaFrequency = new BananaCounter();
 		BananaCounter bananaCounter = new BananaCounter();
+
+		bananaFrequency.Counting(baseTable);
+		bananaFrequency.Print();
 
 		//방문 순서의 index들이 있음
 		//ex) [0, 8, 16] [0, 9, 17] [1, 9, 17] ...
@@ -458,7 +549,7 @@ public static class Circle2BananaConverter {
 
 			Debug.WriteLine(total);
 
-			List<List<int>> tempList = new List<List<int>>();
+			PriorityQueue<List<int>, int> resultQueue = new PriorityQueue<List<int>, int>();
 
 			for (int i = 0; i < count; i++) {
 				List<int> baseIndexs = queue.Dequeue();
@@ -480,6 +571,7 @@ public static class Circle2BananaConverter {
 				bananaCounter.Counting(baseTable, baseIndexs);
 
 				if (fruitCount == bananaCounter.realCount) {
+					Debug.WriteLine("Find");
 					minTable.Set(baseTable, baseIndexs);
 					return;
 					//종료
@@ -489,7 +581,7 @@ public static class Circle2BananaConverter {
 
 				//시뮬후에 원래대로
 				bananaCounter.UnCounting(baseTable, baseIndexs);
-	
+
 				currentMaxRealCount = Math.Max(currentMaxRealCount, realCount);
 
 				//많지 않은거 그냥 버림
@@ -520,6 +612,13 @@ public static class Circle2BananaConverter {
 				for (int j = firstPossibleIndex; j < infos.Count; j++) {
 					MatchingInfo nextInfo = infos[j];
 
+					int x1 = nextInfo.firstFruitX;
+					int t1 = nextInfo.firstFruitTime;
+					int x2 = nextInfo.secondFruitX;
+					int t2 = nextInfo.secondFruitTime;
+
+					int priority = Math.Min(bananaFrequency.Get(x1, t1), bananaFrequency.Get(x2, t2));
+
 					//처음 rngCount + 8 미만의 값 까지만
 					if (nextInfo.rngCount - Consts.MAX_RNG_LENGTH < firstPossibleInfo.rngCount) {
 						List<int> newIndexs = new List<int>();
@@ -527,31 +626,17 @@ public static class Circle2BananaConverter {
 						newIndexs.AddRange(baseIndexs);
 						newIndexs.Add(j);
 
-						tempList.Add(newIndexs);
+						//작은게 먼저 나와야 작은 것들만 존재함
+						//그러므로 -를 붙임
+						resultQueue.Enqueue(newIndexs, -priority);
+						if (resultQueue.Count > maxQueueLength)
+							resultQueue.Dequeue();
 					}
 				}
 			}
 
-			if (tempList.Count < maxQueueLength) {
-				for (int i=0; i < tempList.Count; i++) {
-					queue.Enqueue(tempList[i]);
-				}
-
-				continue;
-			}
-
-			//maxQueueLength 이상인 경우 랜덤하게 추출
-			for (int i=0; i<maxQueueLength; i++) {
-				int randomIndex = rand.Next(tempList.Count - i);
-
-				queue.Enqueue(tempList[randomIndex]);
-
-				//swap
-				int lastIndex = tempList.Count - 1 - i;
-				var temp = tempList[randomIndex];
-				tempList[randomIndex] = tempList[lastIndex];
-				tempList[lastIndex] = temp;
-			}
+			while (resultQueue.Count > 0)
+				queue.Enqueue(resultQueue.Dequeue());
 		}
 	}
 
@@ -651,15 +736,35 @@ public static class Circle2BananaConverter {
 		}
 	}
 
-    private static string DFSedTableToString(MatchingTable dfsedTable) {
+	/*
+	 * 신기술
+	 * 슬라이더가 -2147481848 에 위치하면
+	 * 끝 지점이 -676ms 인 스피너까지 무시됨 (+ RNG는 늘어남)
+	 */
+	private static string TableToString(MatchingTable table) {
+		BananaTable bananaTable = new BananaTable();
         int currentRNGCount = 0;
         string result = "";
 
-        for (int i=0; i<dfsedTable.infos.Count; i++) {
-            MatchingInfo info = dfsedTable.infos[i];
+        for (int i=0; i< table.infos.Count; i++) {
+            MatchingInfo info = table.infos[i];
 
             if (info.rngCount > currentRNGCount) {
                 int dropletCount = info.rngCount - currentRNGCount;
+				
+
+				if (option.reduceOption == ReduceOption.DummySpinner) {
+					var bananaInfos = bananaTable.GetAvailableInfos(dropletCount);
+
+					for (int j=0; j< bananaInfos.Count; j++) {
+						var bananaInfo = bananaInfos[j];
+	
+						result += string.Format("256,192,{0},12,0,{1},0:0:0:0:", option.dummySpinnerStartTime - bananaInfo.spinnerLength, option.dummySpinnerStartTime);
+						result += Environment.NewLine;
+
+						dropletCount -= bananaInfo.rngCount;
+					}
+				}
 
                 while (dropletCount > 0) {
                     double baseLength = 100.0 * beatmap.DifficultySection.SliderMultiplier / beatmap.DifficultySection.SliderTickRate;
@@ -669,15 +774,15 @@ public static class Circle2BananaConverter {
 
                     if (sliderLength > Consts.MAX_SLIDER) {
                         result += string.Format("0,0,{0},2,0,L|1:0,{1},{2}", Consts.MINUS_TIME, 1, Consts.MAX_SLIDER);
-                        result += "\n";
+                        result += Environment.NewLine;
 
-                        dropletCount -= (int)Math.Round((Consts.MAX_SLIDER - baseLength) / baseLength);
+						dropletCount -= (int)Math.Round((Consts.MAX_SLIDER - baseLength) / baseLength);
                         Console.Write("Exceed " + (int)Math.Round((Consts.MAX_SLIDER - baseLength) / baseLength));
                     } else {
                         result += string.Format("0,0,{0},2,0,L|1:0,{1},{2}", Consts.MINUS_TIME, 1, sliderLength);
-                        result += "\n";
+                        result += Environment.NewLine;
 
-                        dropletCount = 0;
+						dropletCount = 0;
                     }
                 }
 
@@ -688,9 +793,9 @@ public static class Circle2BananaConverter {
             int secondTime = Math.Max(firstTime + 1, info.secondFruitTime); //if firstTime == secondTime gap+1
 
             result += string.Format("256,192,{0},12,0,{1},0:0:0:0:", firstTime, secondTime);
-            result += "\n";
+            result += Environment.NewLine;
 
-            currentRNGCount += Consts.MAX_RNG_LENGTH;
+			currentRNGCount += Consts.MAX_RNG_LENGTH;
         }
 
         return result;

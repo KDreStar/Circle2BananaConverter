@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Circle_2_Banana_Converter
 {
 	internal static class Program
